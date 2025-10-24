@@ -1,6 +1,5 @@
-# ------------------------------
 # Security Group
-# ------------------------------
+#----------------------------------------------------------
 resource "aws_security_group" "my_sg" {
   name        = "simple-sg"
   description = "Allow SSH and monitoring ports"
@@ -27,13 +26,12 @@ resource "aws_security_group" "my_sg" {
   }
 }
 
-# ------------------------------
 # EC2 Instance
-# ------------------------------
+#----------------------------------------------------------
 resource "aws_instance" "myec2" {
   ami           = "ami-08df646e18b182346"  # Amazon Linux 2 (ap-south-1)
   instance_type = "t2.micro"
-  key_name      = "your-keypair-name"      # replace with your key
+  key_name      = "jpkey.pem" 
   security_groups = [aws_security_group.my_sg.name]
   user_data     = file("userdata.sh")
 
@@ -47,9 +45,8 @@ resource "aws_instance" "myec2" {
   }
 }
 
-# ------------------------------
 # Extra Data Disk
-# ------------------------------
+#----------------------------------------------------------
 resource "aws_ebs_volume" "data_disk" {
   availability_zone = aws_instance.myec2.availability_zone
   size              = 10
@@ -64,9 +61,9 @@ resource "aws_volume_attachment" "attach_data" {
   instance_id = aws_instance.myec2.id
 }
 
-# ------------------------------
+
 # CloudWatch Alarms
-# ------------------------------
+#----------------------------------------------------------
 # CPU Alarm
 resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   alarm_name          = "HighCPUAlarm"
