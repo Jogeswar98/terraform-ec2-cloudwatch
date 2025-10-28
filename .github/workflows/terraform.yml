@@ -1,0 +1,53 @@
+name: Deploy AWS Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: "Terraform Deploy"
+    runs-on: ubuntu-latest
+
+    # Provide AWS credentials to all steps
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_access_key_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_secret_access_key }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_session_token }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.2
+
+      - name: Debug AWS Credentials
+        run: |
+          echo "AWS_ACCESS_KEY starts with: ${AWS_access_key_ID:0:4}"
+          aws sts get-caller-identity
+
+      - name: Initialize Terraform
+       # working-directory: terraform
+        run: terraform init
+
+      - name: Validate Terraform
+        #working-directory: terraform
+        run: terraform validate
+
+      - name: Plan Terraform
+        #working-directory: terraform
+        run: terraform plan
+
+      - name: Apply Terraform
+        if: github.ref == 'refs/heads/main'
+        #working-directory: terraform
+        run: terraform apply -auto-approve
+
+      - name: Post Apply Output
+        #working-directory: terraform
+        run: terraform output
