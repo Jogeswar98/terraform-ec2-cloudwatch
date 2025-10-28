@@ -1,40 +1,30 @@
 #!/bin/bash
-yum update -y
+# Update system and install basic tools
+sudo apt update -y
+sudo apt install -y wget curl unzip gnupg
 
-# 1. Install CloudWatch Agent
-yum install -y amazon-cloudwatch-agent
+# Install Zabbix repository and agent
+echo "Installing Zabbix Agent..."
+wget https://repo.zabbix.com/zabbix/6.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.4-3+ubuntu24.04_all.deb
+sudo dpkg -i zabbix-release_6.4-3+ubuntu24.04_all.deb
+sudo apt update -y
+sudo apt install -y zabbix-agent
 
-# Create config file for CloudWatch agent
-cat <<EOF >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-{
-  "metrics": {
-    "namespace": "CWAgent",
-    "metrics_collected": {
-      "mem": {"measurement": ["mem_used_percent"], "metrics_collection_interval": 60},
-      "disk": {"measurement": ["used_percent"], "metrics_collection_interval": 60, "resources": ["/"]},
-      "cpu": {"measurement": ["cpu_usage_idle"], "metrics_collection_interval": 60, "totalcpu": true}
-    }
-  }
-}
-EOF
+# Start and enable zabbix-agent service
+sudo systemctl enable zabbix-agent
+sudo systemctl start zabbix-agent
 
-# Start the CloudWatch Agent
-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-  -a fetch-config -m ec2 \
-  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+# Verify zabbix-agent
+systemctl status zabbix-agent | grep "Active"
 
-# 2. Install Zabbix Agent
-yum install -y zabbix-agent
-systemctl enable zabbix-agent
-systemctl start zabbix-agent
+# Install CloudWatch Agent
+echo "Installing CloudWatch Agent..."
+cd /tmp
+wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+sudo dpkg -i amazon-cloudwatch-agent.deb
 
-# 3. Mount the Data Disk
-DATA_DISK="/dev/sdf"
-MOUNT_POINT="/data"
+# Start and enable CloudWatch agent
+sudo systemctl enable amazon-cloudwatch-agent
+sudo systemctl start amazon-cloudwatch-agent
 
-if [ -b "$DATA_DISK" ]; then
-  mkfs -t xfs $DATA_DISK
-  mkdir -p $MOUNT_POINT
-  mount $DATA_DISK $MOUNT_POINT
-  echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" >> /etc/fstab
-fi
+echo "Zabbix and CloudWatch agents installed successfully."
