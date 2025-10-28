@@ -70,12 +70,19 @@ echo "Setup complete: Zabbix and CloudWatch agents are installed and configured!
 DATA_DISK="/dev/xvdf"
 MOUNT_POINT="/data"
 
-if [ -b "$DATA_DISK" ]; then
-  mkfs -t xfs $DATA_DISK
-  mkdir -p $MOUNT_POINT
-  mount $DATA_DISK $MOUNT_POINT
-  echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" >> /etc/fstab
-fi
+# Format the disk
+sudo mkfs -t xfs $DATA_DISK
 
+# Create the mount directory
+sudo mkdir -p $MOUNT_POINT
 
+# Mount the disk
+sudo mount $DATA_DISK $MOUNT_POINT
+
+# Make the mount persistent
+echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" | sudo tee -a /etc/fstab
+
+echo "Disk $DATA_DISK mounted successfully at $MOUNT_POINT"
+
+echo "Setup complete: Zabbix and CloudWatch agents are installed and configured!"
 
