@@ -65,5 +65,17 @@ EOF
 
 sudo systemctl enable amazon-cloudwatch-agent
 sudo systemctl restart amazon-cloudwatch-agent
+echo "Setup complete: Zabbix and CloudWatch agents are installed and configured!"
+# 3. Mount the Data Disk
+DATA_DISK="/dev/xvdf"
+MOUNT_POINT="/data"
 
-echo "✅ Setup complete: Zabbix and CloudWatch agents are installed and configured!"
+if [ -b "$DATA_DISK" ]; then
+  mkfs -t xfs $DATA_DISK
+  mkdir -p $MOUNT_POINT
+  mount $DATA_DISK $MOUNT_POINT
+  echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" >> /etc/fstab
+fi
+
+
+
