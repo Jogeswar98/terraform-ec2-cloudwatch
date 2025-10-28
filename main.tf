@@ -1,7 +1,7 @@
 # Security Group
 #----------------------------------------------------------
 resource "aws_security_group" "my_sg" {
-  name        = "simple-sg"
+  name        = "simple-sg-01"
   description = "Allow SSH and monitoring ports"
 
   ingress {
