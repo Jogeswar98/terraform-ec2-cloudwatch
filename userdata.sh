@@ -1,11 +1,8 @@
 #!/bin/bash
-# Update packages and install prerequisites
 sudo apt update -y
 sudo apt install -y wget curl gnupg lsb-release
 
-#########################################
-# 🧠 ZABBIX AGENT INSTALLATION
-#########################################
+#  ZABBIX Installation
 echo "Adding Zabbix Repository..."
 sudo mkdir -p /usr/share/keyrings
 curl -fsSL https://repo.zabbix.com/zabbix-official-repo.key \
@@ -22,17 +19,17 @@ sudo apt install -y zabbix-agent || echo "Zabbix install failed!"
 sudo systemctl enable zabbix-agent || true
 sudo systemctl start zabbix-agent || true
 
-#########################################
-# ☁️ CLOUDWATCH AGENT INSTALLATION
-#########################################
+
+# CLOUDWATCH agent Installation
+
 echo "Installing CloudWatch Agent..."
 cd /tmp
 wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
 sudo dpkg -i amazon-cloudwatch-agent.deb
 
-#########################################
-# 🧰 CREATE BASIC CLOUDWATCH CONFIG
-#########################################
+
+# CREATE BASIC CLOUDWATCH CONFIG
+
 echo "Creating CloudWatch Agent config..."
 sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
 sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null <<EOF
@@ -64,9 +61,8 @@ sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /de
 }
 EOF
 
-#########################################
-# 🚀 START CLOUDWATCH AGENT
-#########################################
+#  START CLOUDWATCH AGENT
+
 sudo systemctl enable amazon-cloudwatch-agent
 sudo systemctl restart amazon-cloudwatch-agent
 
