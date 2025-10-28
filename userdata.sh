@@ -1,32 +1,30 @@
 #!/bin/bash
-# Update system and install prerequisites
 sudo apt update -y
-sudo apt install -y wget curl gnupg2 lsb-release
+sudo apt install -y wget curl gnupg lsb-release
 
-# Download and install Zabbix repo for Ubuntu 22.04 (works on 24.04 too)
-echo "Installing Zabbix Agent..."
-wget https://repo.zabbix.com/zabbix/6.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.4-3+ubuntu22.04_all.deb
-sudo dpkg -i zabbix-release_6.4-3+ubuntu22.04_all.deb
+# Add Zabbix repository manually
+echo "Adding Zabbix Repository..."
+sudo mkdir -p /usr/share/keyrings
+curl -fsSL https://repo.zabbix.com/zabbix-official-repo.key \
+  | sudo gpg --dearmor -o /usr/share/keyrings/zabbix.gpg
+
+# Create the repo list manually
+echo "deb [signed-by=/usr/share/keyrings/zabbix.gpg] https://repo.zabbix.com/zabbix/6.4/ubuntu $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/zabbix.list
+
+# Install Zabbix agent
 sudo apt update -y
+sudo apt install -y zabbix-agent || echo "Zabbix install failed!"
 
-# Install Zabbix Agent
-sudo apt install -y zabbix-agent
+sudo systemctl enable zabbix-agent || true
+sudo systemctl start zabbix-agent || true
 
-# Enable and start Zabbix Agent
-sudo systemctl enable zabbix-agent
-sudo systemctl start zabbix-agent
-
-# Check Zabbix Agent status
-systemctl status zabbix-agent | grep Active
-
-# Install CloudWatch Agent
+# Install CloudWatch Agent 
 echo "Installing CloudWatch Agent..."
 cd /tmp
 wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
 sudo dpkg -i amazon-cloudwatch-agent.deb
-
-# Enable and start CloudWatch Agent
 sudo systemctl enable amazon-cloudwatch-agent
 sudo systemctl start amazon-cloudwatch-agent
 
-echo "✅ Installation complete: Zabbix and CloudWatch agents are installed and running."
+echo "✅ Setup complete. Check agent statuses using systemctl."
