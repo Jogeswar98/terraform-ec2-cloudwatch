@@ -1,46 +1,47 @@
 #!/bin/bash
+set -e
+
+# 1. Basic setup
 sudo apt update -y
-sudo apt install -y wget curl gnupg lsb-release
+sudo apt install -y wget curl gnupg lsb-release unzip
 
-#  ZABBIX Installation
-echo "Adding Zabbix Repository..."
+# 2. Install Zabbix Agent
+
+echo "[INFO] Installing Zabbix Agent..."
 sudo mkdir -p /usr/share/keyrings
-curl -fsSL https://repo.zabbix.com/zabbix-official-repo.key \
-  | sudo gpg --dearmor -o /usr/share/keyrings/zabbix.gpg
+curl -fsSL https://repo.zabbix.com/zabbix-official-repo.key | sudo gpg --dearmor -o /usr/share/keyrings/zabbix.gpg
 
-# Create the repo list manually
 echo "deb [signed-by=/usr/share/keyrings/zabbix.gpg] https://repo.zabbix.com/zabbix/6.4/ubuntu $(lsb_release -cs) main" \
   | sudo tee /etc/apt/sources.list.d/zabbix.list
 
-# Install Zabbix agent
 sudo apt update -y
-sudo apt install -y zabbix-agent || echo "Zabbix install failed!"
+sudo apt install -y zabbix-agent
 
-sudo systemctl enable zabbix-agent || true
-sudo systemctl start zabbix-agent || true
+sudo systemctl enable zabbix-agent
+sudo systemctl start zabbix-agent
 
+# 3. Install CloudWatch Agent
 
-# CLOUDWATCH agent Installation
-
-echo "Installing CloudWatch Agent..."
+echo "[INFO] Installing Amazon CloudWatch Agent..."
 cd /tmp
-wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+wget -q https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
 sudo dpkg -i amazon-cloudwatch-agent.deb
 
+# 4. Create CloudWatch Configuration
 
-# CREATE BASIC CLOUDWATCH CONFIG
-
-echo "Creating CloudWatch Agent config..."
+echo "[INFO] Creating CloudWatch Agent config..."
 sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
-sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null <<EOF
+
+sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null <<'EOF'
 {
   "agent": {
+    "region": "us-east-1",
     "metrics_collection_interval": 60,
     "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
   },
   "metrics": {
     "append_dimensions": {
-      "InstanceId": "\${aws:InstanceId}"
+      "InstanceId": "${aws:InstanceId}"
     },
     "metrics_collected": {
       "mem": {
@@ -58,10 +59,7 @@ sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /de
           "disk_free",
           "disk_used"
         ],
-        "resources": [
-          "/",
-          "/data"
-        ],
+        "resources": [ "/", "/data" ],
         "metrics_collection_interval": 60
       },
       "cpu": {
@@ -78,28 +76,46 @@ sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /de
 }
 EOF
 
-#  START CLOUDWATCH AGENT
+# 5. Start CloudWatch Agent
+
+echo "[INFO] Starting CloudWatch Agent service..."
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
+  -s
 
 sudo systemctl enable amazon-cloudwatch-agent
 sudo systemctl restart amazon-cloudwatch-agent
-echo "Setup complete: Zabbix and CloudWatch agents are installed and configured!"
-# 3. Mount the Data Disk
+
+# 6. Mount /data Disk
+
 DATA_DISK="/dev/xvdf"
 MOUNT_POINT="/data"
 
-# Format the disk
-sudo mkfs -t xfs $DATA_DISK
+if lsblk | grep -q "$(basename $DATA_DISK)"; then
+  echo "[INFO] Mounting data disk..."
+  sudo mkfs -t xfs $DATA_DISK || true
+  sudo mkdir -p $MOUNT_POINT
+  sudo mount $DATA_DISK $MOUNT_POINT
+  echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" | sudo tee -a /etc/fstab
+  echo "[SUCCESS] Disk $DATA_DISK mounted successfully at $MOUNT_POINT"
+else
+  echo "[WARN] Data disk $DATA_DISK not found — skipping mount step."
+fi
 
-# Create the mount directory
-sudo mkdir -p $MOUNT_POINT
+# 7. Verify IAM Role
 
-# Mount the disk
-sudo mount $DATA_DISK $MOUNT_POINT
+echo "[INFO] Checking IAM Role attachment..."
+if curl -s http://169.254.169.254/latest/meta-data/iam/info | grep -q "InstanceProfileArn"; then
+  echo "[SUCCESS] IAM Role detected."
+else
+  echo "[ERROR] No IAM Role detected! Please attach 'CloudWatchAgentServerPolicy' to this instance's IAM Role."
+fi
 
-# Make the mount persistent
-echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" | sudo tee -a /etc/fstab
-
-echo "Disk $DATA_DISK mounted successfully at $MOUNT_POINT"
-
-echo "Setup complete: Zabbix and CloudWatch agents are installed and configured!"
-
+# 8. Final Confirmation
+echo
+echo "✅ Setup complete:"
+echo "   - Zabbix Agent installed and running"
+echo "   - CloudWatch Agent installed, configured for region us-east-1"
+echo "   - /data disk mounted (if attached)"
+echo "   - Ready to publish metrics to CloudWatch"
