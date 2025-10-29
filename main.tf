@@ -33,7 +33,7 @@ resource "aws_instance" "myec2" {
   instance_type = "t2.micro"
   key_name      = "jpkey" 
   security_groups = [aws_security_group.my_sg.name]
-  user_data     = file("userdata.sh")
+  user_data     = file("testuserdata.sh")
 
   root_block_device {
     volume_size = 8
