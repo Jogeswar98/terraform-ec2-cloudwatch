@@ -1,5 +1,6 @@
-# Security Group
-#----------------------------------------------------------
+# ----------------------------------------------------------
+# SECURITY GROUP
+# ----------------------------------------------------------
 resource "aws_security_group" "my_sg" {
   name        = "simple-sg-01"
   description = "Allow SSH and monitoring ports"
@@ -26,14 +27,47 @@ resource "aws_security_group" "my_sg" {
   }
 }
 
-# EC2 Instance
-#----------------------------------------------------------
+# ----------------------------------------------------------
+# IAM ROLE + INSTANCE PROFILE (for CloudWatch Agent)
+# ----------------------------------------------------------
+
+resource "aws_iam_role" "cloudwatch_agent_role" {
+  name = "CloudWatchAgentRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
+  role       = aws_iam_role.cloudwatch_agent_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_iam_instance_profile" "cloudwatch_agent_profile" {
+  name = "CloudWatchAgentInstanceProfile"
+  role = aws_iam_role.cloudwatch_agent_role.name
+}
+
+# ----------------------------------------------------------
+# EC2 INSTANCE
+# ----------------------------------------------------------
 resource "aws_instance" "myec2" {
-  ami           = "ami-0360c520857e3138f"  # ubuntu
+  ami           = "ami-0360c520857e3138f"  # Ubuntu
   instance_type = "t2.micro"
-  key_name      = "jpkey" 
+  key_name      = "jpkey"
   security_groups = [aws_security_group.my_sg.name]
-  user_data     = file("testuserdata.sh")
+
+  iam_instance_profile = aws_iam_instance_profile.cloudwatch_agent_profile.name
+
+  user_data = file("testuserdata.sh")
 
   root_block_device {
     volume_size = 8
@@ -45,8 +79,9 @@ resource "aws_instance" "myec2" {
   }
 }
 
-# Extra Data Disk
-#----------------------------------------------------------
+# ----------------------------------------------------------
+# EXTRA DATA DISK
+# ----------------------------------------------------------
 resource "aws_ebs_volume" "data_disk" {
   availability_zone = aws_instance.myec2.availability_zone
   size              = 10
@@ -61,9 +96,10 @@ resource "aws_volume_attachment" "attach_data" {
   instance_id = aws_instance.myec2.id
 }
 
+# ----------------------------------------------------------
+# CLOUDWATCH ALARMS
+# ----------------------------------------------------------
 
-# CloudWatch Alarms
-#----------------------------------------------------------
 # CPU Alarm
 resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   alarm_name          = "HighCPUAlarm"
