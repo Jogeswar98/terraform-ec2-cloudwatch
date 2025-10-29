@@ -114,7 +114,7 @@ fi
 
 # 8. Final Confirmation
 echo
-echo "✅ Setup complete:"
+echo " Setup complete:"
 echo "   - Zabbix Agent installed and running"
 echo "   - CloudWatch Agent installed, configured for region us-east-1"
 echo "   - /data disk mounted (if attached)"
