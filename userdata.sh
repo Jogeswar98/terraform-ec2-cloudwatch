@@ -36,24 +36,28 @@ sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /de
 {
   "agent": {
     "metrics_collection_interval": 60,
-    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
+    "region": "us-east-1"
   },
   "metrics": {
     "append_dimensions": {
       "InstanceId": "\${aws:InstanceId}"
     },
     "metrics_collected": {
+      "cpu": {
+        "measurement": [
+          "cpu_usage_idle",
+          "cpu_usage_user",
+          "cpu_usage_system"
+        ],
+        "totalcpu": true
+      },
       "mem": {
         "measurement": ["mem_used_percent"],
         "metrics_collection_interval": 60
       },
       "disk": {
-        "measurement": ["used_percent"],
-        "metrics_collection_interval": 60,
-        "resources": ["*"]
-      },
-      "cpu": {
-        "measurement": ["cpu_usage_idle"],
+        "measurement": ["disk_used_percent"],
+        "resources": ["/", "/mnt/data"],
         "metrics_collection_interval": 60
       }
     }
@@ -85,4 +89,3 @@ echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" | sudo tee -a /etc/f
 echo "Disk $DATA_DISK mounted successfully at $MOUNT_POINT"
 
 echo "Setup complete: Zabbix and CloudWatch agents are installed and configured!"
-
