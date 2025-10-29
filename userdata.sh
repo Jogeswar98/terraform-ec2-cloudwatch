@@ -1,9 +1,24 @@
 #!/bin/bash
 set -e
-sudo apt update -y
-sudo apt install -y wget curl gnupg lsb-release awscli
+# Detect instance region robustly
+REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | grep region | awk -F\" '{print $4}')
 
-# ---------- ZABBIX INSTALL ----------
+# If region is still empty, try AWS CLI
+if [ -z "$REGION" ]; then
+  REGION=$(aws configure get region)
+fi
+
+# Default fallback (optional)
+if [ -z "$REGION" ]; then
+  REGION="us-east-1"
+fi
+
+INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+echo "Setting up monitoring on EC2 instance: $INSTANCE_ID in region: $REGION"
+
+# ---------------------------------------------------------
+# 1. Install Zabbix agent
+# ---------------------------------------------------------
 echo "Adding Zabbix Repository..."
 sudo mkdir -p /usr/share/keyrings
 curl -fsSL https://repo.zabbix.com/zabbix-official-repo.key \
@@ -17,8 +32,9 @@ sudo apt install -y zabbix-agent || echo "Zabbix install failed!"
 sudo systemctl enable zabbix-agent
 sudo systemctl start zabbix-agent
 
-
-# ---------- CLOUDWATCH AGENT INSTALL ----------
+# ---------------------------------------------------------
+# 2. Install and configure CloudWatch Agent
+# ---------------------------------------------------------
 echo "Installing CloudWatch Agent..."
 cd /tmp
 wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
@@ -32,7 +48,7 @@ sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /de
 {
   "agent": {
     "metrics_collection_interval": 60,
-    "region": "us-east-1"
+    "region": "${REGION}"
   },
   "metrics": {
     "append_dimensions": {
@@ -61,33 +77,19 @@ sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /de
 }
 EOF
 
-sudo systemctl enable amazon-cloudwatch-agent
-sudo systemctl restart amazon-cloudwatch-agent
+# Start CloudWatch agent
+echo "Starting CloudWatch agent..."
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
+  -s
 
+# ---------------------------------------------------------
+# 3. Create CloudWatch Alarms (without SNS)
+# ---------------------------------------------------------
+echo "Creating CloudWatch alarms..."
 
-# ---------- DISK MOUNT ----------
-DATA_DISK="/dev/xvdf"
-MOUNT_POINT="/data"
-
-if [ -b "$DATA_DISK" ]; then
-  echo "Mounting data disk..."
-  sudo mkfs -t xfs $DATA_DISK
-  sudo mkdir -p $MOUNT_POINT
-  sudo mount $DATA_DISK $MOUNT_POINT
-  echo "$DATA_DISK  $MOUNT_POINT  xfs  defaults,nofail  0  2" | sudo tee -a /etc/fstab
-  echo "Disk $DATA_DISK mounted successfully at $MOUNT_POINT"
-else
-  echo "Data disk not found: $DATA_DISK"
-fi
-
-
-# ---------- CREATE CLOUDWATCH ALARMS ----------
-echo "Creating CloudWatch Alarms..."
-
-# Get the current instance ID
-INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-
-# CPU Alarm - Trigger if CPU > 80% for 5 minutes
+# CPU Alarm - Trigger if CPU > 80%
 aws cloudwatch put-metric-alarm \
   --alarm-name "High-CPU-Utilization-${INSTANCE_ID}" \
   --metric-name CPUUtilization \
@@ -98,7 +100,6 @@ aws cloudwatch put-metric-alarm \
   --comparison-operator GreaterThanThreshold \
   --dimensions Name=InstanceId,Value=$INSTANCE_ID \
   --evaluation-periods 1 \
-  --alarm-actions arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:YOUR_SNS_TOPIC \
   --treat-missing-data notBreaching \
   --alarm-description "Alarm when CPU exceeds 80%"
 
@@ -113,7 +114,6 @@ aws cloudwatch put-metric-alarm \
   --comparison-operator GreaterThanThreshold \
   --dimensions Name=InstanceId,Value=$INSTANCE_ID \
   --evaluation-periods 1 \
-  --alarm-actions arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:YOUR_SNS_TOPIC \
   --treat-missing-data notBreaching \
   --alarm-description "Alarm when memory usage exceeds 80%"
 
@@ -128,8 +128,7 @@ aws cloudwatch put-metric-alarm \
   --comparison-operator GreaterThanThreshold \
   --dimensions Name=InstanceId,Value=$INSTANCE_ID,Name=path,Value=/data \
   --evaluation-periods 1 \
-  --alarm-actions arn:aws:sns:us-east-1:YOUR_ACCOUNT_ID:YOUR_SNS_TOPIC \
   --treat-missing-data notBreaching \
   --alarm-description "Alarm when disk usage exceeds 85%"
 
-echo "✅ Setup complete: Zabbix, CloudWatch agent, and alarms configured!"
+echo "✅ Setup complete: Zabbix, CloudWatch agent, and alarms configured successfully!"
